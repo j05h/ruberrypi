@@ -18,11 +18,13 @@ Currently, RuberryPi will:
 4. Install your selected distro on your SD card.
 5. Eject the SD card.
 
+<pre>
     Usage: ruberrypi [options]
             --distro STRING              Distro to use (arch, debian)
             --device STRING              Device to format ()
             --devices                    Prints full info on suggested devices
         -h, --help                       Show this message
+</pre>
 
 ## Requirements
 
