@@ -1,0 +1,116 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+
+distros = {
+  :arch => {
+    :file => 'archlinuxarm-13-06-2012.zip',
+    :url => 'http://files.velocix.com/c1410/images/archlinuxarm/archlinuxarm-13-06-2012/archlinuxarm-13-06-2012.zip',
+    :checksum => '8ca812dfb7f68156869a59a2c511d3eccd118da0',
+    :username => 'pi',
+    :password => 'raspberry'
+  },
+  :debian => {
+    :file => 'debian6-19-04-2012.zip',
+    :url => 'http://files.velocix.com/c1410/images/debian/6/debian6-19-04-2012/debian6-19-04-2012.zip',
+    :checksum => '1852df83a11ee7083ca0e5f3fb41f93ecc59b1c8',
+    :username => 'root',
+    :password => 'root'
+  }
+}
+
+devices = `df -h | awk '$1 ~ /\\/dev/ && $6 !~ /\\/$/ {print $1}'`.split($/)
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: ruberrypi [options]"
+  opts.on("--distro STRING", "Distro to use (#{distros.keys.join(', ')})") do |distro|
+    options[:distro] = distros[distro.to_sym]
+    unless options[:distro]
+      puts "You must choose a supported distro (#{distros.keys.join(', ')})"
+      exit
+    end
+  end
+
+  opts.on("--device STRING", "Device to format (#{devices.join(', ')})") do |device|
+    if devices.include?(device)
+      options[:device] = device
+    else
+      puts "You must choose a valid device. (#{devices.join(', ')})"
+      exit
+    end
+  end
+
+  opts.on("--devices", "Prints full info on suggested devices") do
+    puts "Possible devices to use:"
+    puts `df -h | awk '$1 ~ /\\/dev/ && $6 !~ /\\/$/'`
+    exit
+  end
+
+  opts.on_tail('-h', '--help', 'Show this message') do
+    puts opts
+    exit
+  end
+end.parse!
+
+distro = options[:distro]
+device = options[:device]
+url = distro[:url]
+
+puts "Downloading #{url}"
+
+def checksum filename, checksum
+  sum = `shasum #{filename}`.split(' ').first
+
+  if sum.eql? checksum
+    return true
+  else
+    puts "Checksum does not match -- deleting #{filename}"
+    File.delete filename
+    return false
+  end
+end
+
+def verify
+  unless STDIN.gets.match(/^Y/)
+    puts "If you're not sure, I'm not sure."
+    exit
+  end
+end
+
+filename = File.join '/tmp', distro[:file]
+if File.exists? filename
+  checksum filename, distro[:checksum]
+end
+
+`curl -L -o #{filename} #{url}` unless File.exists?(filename)
+
+exit unless checksum filename, distro[:checksum]
+
+puts "Checksum #{distro[:checksum]} matches"
+
+puts "Unzipping #{filename}"
+puts `unzip #{filename} -d /tmp`
+
+puts "Ready to unmount and format #{device} are you SURE? (Y/N)"
+verify
+
+puts "Unmounting #{device}"
+puts `diskutil unmount #{device}`
+
+base = distro[:file].sub(/\.zip$/,'')
+image = "/tmp/#{base}/#{base}.img"
+
+unless File.exists? image
+  puts "#{image} does not exist. Something wrong there is."
+  exit
+end
+
+puts "Ready to image #{device} with #{image}.\nYou ready for this? (Y/N)"
+verify
+
+puts `sudo dd bs=1m if=#{image} of=#{device}`
+
+puts `diskutil eject #{device}`
+
+puts "Imaging complete."
